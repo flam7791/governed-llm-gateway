@@ -1,0 +1,75 @@
+{
+  "db_path": "gateway.db",
+  "cache_ttl_seconds": 86400,
+  "max_output_tokens": 4000,
+  "models": [
+    {
+      "alias": "local",
+      "provider": "openai_compatible",
+      "model": "llama3.1:8b",
+      "base_url": "http://localhost:11434/v1",
+      "tier": "local",
+      "price_input": 0.0,
+      "price_output": 0.0,
+      "external": false
+    },
+    {
+      "alias": "claude-fast",
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5-20251001",
+      "tier": "fast",
+      "price_input": 1.0,
+      "price_output": 5.0,
+      "external": true
+    },
+    {
+      "alias": "claude-strong",
+      "provider": "anthropic",
+      "model": "claude-sonnet-5",
+      "tier": "strong",
+      "price_input": 2.0,
+      "price_output": 10.0,
+      "external": true
+    }
+  ],
+  "tier_models": {
+    "local": "local",
+    "fast": "claude-fast",
+    "strong": "claude-strong"
+  },
+  "fallback_order": [
+    "claude-strong",
+    "claude-fast",
+    "local"
+  ],
+  "teams": [
+    {
+      "name": "research",
+      "monthly_budget_usd": 50,
+      "allowed_models": [
+        "*"
+      ],
+      "data_policy": "mask_pii",
+      "on_budget_exhausted": "degrade"
+    },
+    {
+      "name": "communications",
+      "monthly_budget_usd": 20,
+      "allowed_models": [
+        "local",
+        "claude-fast"
+      ],
+      "data_policy": "local_if_pii",
+      "on_budget_exhausted": "block"
+    },
+    {
+      "name": "legal",
+      "monthly_budget_usd": 0,
+      "allowed_models": [
+        "local"
+      ],
+      "data_policy": "local_only",
+      "on_budget_exhausted": "block"
+    }
+  ]
+}
