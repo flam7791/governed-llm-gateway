@@ -30,6 +30,17 @@
       "price_input": 2.0,
       "price_output": 10.0,
       "external": true
+    },
+    {
+      "alias": "local-embed",
+      "provider": "openai_compatible",
+      "model": "nomic-embed-text",
+      "base_url": "http://localhost:11434/v1",
+      "kind": "embedding",
+      "tier": "embedding",
+      "price_input": 0.0,
+      "price_output": 0.0,
+      "external": false
     }
   ],
   "tier_models": {
@@ -42,6 +53,7 @@
     "claude-fast",
     "local"
   ],
+  "embedding_model": "local-embed",
   "teams": [
     {
       "name": "research",

@@ -51,12 +51,24 @@ def _keys_add(args) -> int:
 
 
 def _serve(args) -> int:
+    import os
+
     import uvicorn
 
     from .api import create_app
     from .factory import build_gateway
 
-    app = create_app(build_gateway(_load(args)))
+    # One JSON line per request (no content) on stdout, for the platform's log collector.
+    usage = logging.getLogger("llmgw.usage")
+    usage.setLevel(logging.INFO)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    usage.addHandler(handler)
+    usage.propagate = False
+
+    app = create_app(
+        build_gateway(_load(args)), metrics_token=os.environ.get("LLMGW_METRICS_TOKEN") or None
+    )
     uvicorn.run(app, host=args.host, port=args.port)
     return 0
 
@@ -155,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("team")
 
     p = with_config(sub.add_parser("serve", help="run the HTTP gateway"))
-    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--host", default="127.0.0.1", help="0.0.0.0 inside a container")
     p.add_argument("--port", type=int, default=8080)
 
     p = with_config(sub.add_parser("ask", help="send one prompt through the gateway"))

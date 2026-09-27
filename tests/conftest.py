@@ -10,7 +10,7 @@ import pytest
 from llmgw.config import EXAMPLE_CONFIG, GatewayConfig, hash_key
 from llmgw.gateway import Gateway
 from llmgw.ledger import Ledger
-from llmgw.providers import Completion, ProviderError
+from llmgw.providers import Completion, Embeddings, ProviderError
 
 ROOT = Path(__file__).resolve().parents[1]
 KEYS = {"research": "key-research", "communications": "key-comms", "legal": "key-legal"}
@@ -31,6 +31,12 @@ class FakeProvider:
         if self.fail:
             raise ProviderError(f"{self.name} is down")
         return Completion(self.answer(messages), *self.tokens, latency_ms=42)
+
+    def embed(self, model, texts) -> Embeddings:
+        self.calls.append({"model": model, "texts": list(texts)})
+        if self.fail:
+            raise ProviderError(f"{self.name} is down")
+        return Embeddings([[float(len(t)), 1.0] for t in texts], 7 * len(texts), latency_ms=5)
 
 
 def make_config(tmp_path: Path, **team_overrides) -> GatewayConfig:

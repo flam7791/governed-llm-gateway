@@ -9,29 +9,42 @@ Teams are the unit of access, budget and policy. Each team has:
     mask_pii      external models allowed; personal data is masked before it leaves
     local_if_pii  external models allowed, but requests containing personal data stay local
 - what happens when the budget runs out: "block", or "degrade" to a cheaper model.
+
+Models are chat models (routed by tier) or embedding models (used by /v1/embeddings). Providers:
+anthropic (Claude), azure_openai (Azure OpenAI / Microsoft Foundry, v1 API, key or Entra ID) and
+openai_compatible (Ollama, vLLM and other OpenAI-format servers).
+
+Secrets never live in this file: provider keys come from environment variables, and a team's
+key can be given as an environment variable (key_env) instead of a stored hash.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 DATA_POLICIES = ("local_only", "mask_pii", "local_if_pii")
 TIERS = ("local", "fast", "strong")
+PROVIDERS = ("anthropic", "azure_openai", "openai_compatible")
+KINDS = ("chat", "embedding")
 
 
 @dataclass(frozen=True)
 class ModelSpec:
     alias: str  # the name teams use, e.g. "claude-fast"
-    provider: str  # "anthropic" or "openai_compatible"
-    model: str  # the provider's model id
-    tier: str  # "local", "fast" or "strong"
+    provider: str  # "anthropic", "azure_openai" or "openai_compatible"
+    model: str  # the provider's model id (for Azure OpenAI: the deployment name)
+    tier: str  # "local", "fast" or "strong" (chat models); "embedding" for embedding models
     price_input: float  # USD per million input tokens
     price_output: float  # USD per million output tokens
     external: bool  # True if data leaves the organisation
-    base_url: str | None = None  # for openai_compatible providers (e.g. Ollama)
+    base_url: str | None = None  # openai_compatible and azure_openai endpoints
+    kind: str = "chat"  # "chat" or "embedding"
+    api_key_env: str | None = None  # environment variable holding the provider key
+    auth: str = "api_key"  # azure_openai only: "api_key" or "entra_id" (managed identity)
 
     def cost(self, input_tokens: int, output_tokens: int) -> float:
         return (input_tokens * self.price_input + output_tokens * self.price_output) / 1_000_000
@@ -57,6 +70,7 @@ class GatewayConfig:
     # Preferred model alias for each tier, and the order in which to fall back.
     tier_models: dict[str, str]
     fallback_order: tuple[str, ...]
+    embedding_model: str | None = None  # default model for /v1/embeddings
     db_path: Path = Path("gateway.db")
     cache_ttl_seconds: int = 24 * 3600
     max_output_tokens: int = 4000
@@ -71,15 +85,19 @@ class GatewayConfig:
         models = {m["alias"]: ModelSpec(**m) for m in data["models"]}
         teams = {}
         for t in data.get("teams", []):
+            key_hash = t.get("key_hash", "")
+            if t.get("key_env") and os.environ.get(t["key_env"]):
+                key_hash = hash_key(os.environ[t["key_env"]])  # e.g. from a secret store
             teams[t["name"]] = TeamPolicy(
                 name=t["name"],
-                key_hash=t.get("key_hash", ""),
+                key_hash=key_hash,
                 monthly_budget_usd=float(t["monthly_budget_usd"]),
                 allowed_models=tuple(t.get("allowed_models", ["*"])),
                 data_policy=t.get("data_policy", "mask_pii"),
                 on_budget_exhausted=t.get("on_budget_exhausted", "degrade"),
             )
-        db = Path(data.get("db_path", "gateway.db"))
+        # LLMGW_DB_PATH lets a container keep the ledger on a volume, apart from the config.
+        db = Path(os.environ.get("LLMGW_DB_PATH") or data.get("db_path", "gateway.db"))
         if base is not None and not db.is_absolute():
             db = base.parent / db
         config = cls(
@@ -87,6 +105,7 @@ class GatewayConfig:
             teams=teams,
             tier_models=dict(data["tier_models"]),
             fallback_order=tuple(data["fallback_order"]),
+            embedding_model=data.get("embedding_model"),
             db_path=db,
             cache_ttl_seconds=int(data.get("cache_ttl_seconds", 24 * 3600)),
             max_output_tokens=int(data.get("max_output_tokens", 4000)),
@@ -94,18 +113,37 @@ class GatewayConfig:
         config.validate()
         return config
 
+    def chat_model(self, alias: str) -> bool:
+        return alias in self.models and self.models[alias].kind == "chat"
+
     def validate(self) -> None:
+        for spec in self.models.values():
+            if spec.provider not in PROVIDERS:
+                raise ValueError(f"model {spec.alias}: provider must be one of {PROVIDERS}")
+            if spec.kind not in KINDS:
+                raise ValueError(f"model {spec.alias}: kind must be one of {KINDS}")
+            if spec.kind == "chat" and spec.tier not in TIERS:
+                raise ValueError(f"model {spec.alias}: tier must be one of {TIERS}")
+            if spec.provider == "azure_openai" and not spec.base_url:
+                raise ValueError(f"model {spec.alias}: azure_openai needs base_url")
+            if spec.auth not in ("api_key", "entra_id"):
+                raise ValueError(f"model {spec.alias}: auth must be api_key or entra_id")
         for team in self.teams.values():
             if team.data_policy not in DATA_POLICIES:
                 raise ValueError(f"team {team.name}: data_policy must be one of {DATA_POLICIES}")
             if team.on_budget_exhausted not in ("block", "degrade"):
                 raise ValueError(f"team {team.name}: on_budget_exhausted must be block or degrade")
         for tier, alias in self.tier_models.items():
-            if tier not in TIERS or alias not in self.models:
+            if tier not in TIERS or not self.chat_model(alias):
                 raise ValueError(f"tier_models: {tier} -> {alias} is not a known tier and model")
         for alias in self.fallback_order:
-            if alias not in self.models:
-                raise ValueError(f"fallback_order: unknown model {alias}")
+            if not self.chat_model(alias):
+                raise ValueError(f"fallback_order: unknown chat model {alias}")
+        if self.embedding_model and (
+            self.embedding_model not in self.models
+            or self.models[self.embedding_model].kind != "embedding"
+        ):
+            raise ValueError(f"embedding_model: {self.embedding_model} is not an embedding model")
 
 
 def hash_key(api_key: str) -> str:
@@ -145,9 +183,21 @@ EXAMPLE_CONFIG = {
             "price_output": 10.0,
             "external": True,
         },
+        {
+            "alias": "local-embed",
+            "provider": "openai_compatible",
+            "model": "nomic-embed-text",
+            "base_url": "http://localhost:11434/v1",
+            "kind": "embedding",
+            "tier": "embedding",
+            "price_input": 0.0,
+            "price_output": 0.0,
+            "external": False,
+        },
     ],
     "tier_models": {"local": "local", "fast": "claude-fast", "strong": "claude-strong"},
     "fallback_order": ["claude-strong", "claude-fast", "local"],
+    "embedding_model": "local-embed",
     "teams": [
         {
             "name": "research",

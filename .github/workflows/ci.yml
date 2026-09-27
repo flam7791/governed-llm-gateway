@@ -34,3 +34,22 @@ jobs:
         run: |
           cp gateway.example.json gateway.json
           llmgw eval evals/tasks.jsonl --config gateway.json --recordings evals/recordings --offline
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t governed-llm-gateway .
+      - name: Start it and check health, access control and metrics
+        run: |
+          docker run -d --name gw -p 127.0.0.1:8080:8080 \
+            -v "$PWD/gateway.azure.example.json:/config/gateway.json:ro" \
+            -e LLMGW_KEY_RESEARCH=ci-key governed-llm-gateway
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/healthz && break; sleep 1; done
+          curl -fsS -H "Authorization: Bearer ci-key" http://127.0.0.1:8080/v1/models
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/models)" = "401"
+          curl -fsS http://127.0.0.1:8080/metrics | grep llmgw_budget_remaining_usd
+      - name: Container logs
+        if: always()
+        run: docker logs gw

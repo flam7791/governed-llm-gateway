@@ -1,0 +1,81 @@
+{
+  "db_path": "gateway.db",
+  "cache_ttl_seconds": 86400,
+  "max_output_tokens": 4000,
+  "models": [
+    {
+      "alias": "local",
+      "provider": "openai_compatible",
+      "model": "llama3.1:8b",
+      "base_url": "http://ollama:11434/v1",
+      "tier": "local",
+      "price_input": 0.0,
+      "price_output": 0.0,
+      "external": false
+    },
+    {
+      "alias": "azure-fast",
+      "provider": "azure_openai",
+      "model": "YOUR-SMALL-MODEL-DEPLOYMENT",
+      "base_url": "https://YOUR-RESOURCE.openai.azure.com/openai/v1",
+      "auth": "entra_id",
+      "tier": "fast",
+      "price_input": 0.4,
+      "price_output": 1.6,
+      "external": true
+    },
+    {
+      "alias": "azure-strong",
+      "provider": "azure_openai",
+      "model": "YOUR-LARGE-MODEL-DEPLOYMENT",
+      "base_url": "https://YOUR-RESOURCE.openai.azure.com/openai/v1",
+      "auth": "entra_id",
+      "tier": "strong",
+      "price_input": 2.0,
+      "price_output": 8.0,
+      "external": true
+    },
+    {
+      "alias": "claude-strong",
+      "provider": "anthropic",
+      "model": "claude-sonnet-5",
+      "tier": "strong",
+      "price_input": 2.0,
+      "price_output": 10.0,
+      "external": true
+    },
+    {
+      "alias": "azure-embed",
+      "provider": "azure_openai",
+      "model": "YOUR-EMBEDDING-DEPLOYMENT",
+      "base_url": "https://YOUR-RESOURCE.openai.azure.com/openai/v1",
+      "auth": "entra_id",
+      "kind": "embedding",
+      "tier": "embedding",
+      "price_input": 0.02,
+      "price_output": 0.0,
+      "external": true
+    }
+  ],
+  "tier_models": {"local": "local", "fast": "azure-fast", "strong": "azure-strong"},
+  "fallback_order": ["azure-strong", "claude-strong", "azure-fast", "local"],
+  "embedding_model": "azure-embed",
+  "teams": [
+    {
+      "name": "research",
+      "key_env": "LLMGW_KEY_RESEARCH",
+      "monthly_budget_usd": 50,
+      "allowed_models": ["*"],
+      "data_policy": "mask_pii",
+      "on_budget_exhausted": "degrade"
+    },
+    {
+      "name": "legal",
+      "key_env": "LLMGW_KEY_LEGAL",
+      "monthly_budget_usd": 0,
+      "allowed_models": ["local"],
+      "data_policy": "local_only",
+      "on_budget_exhausted": "block"
+    }
+  ]
+}

@@ -73,3 +73,22 @@ vLLM and similar servers expose, and are configured like any other model.
 **Consequences.** Swapping a laptop model for a private-cloud deployment is a configuration
 change. Local "cost" is shown as zero in the ledger, but hardware and energy are real costs;
 the price fields can carry an internal rate.
+
+## 9. Embeddings never fall back
+
+**Context.** For chat, falling back to another model on failure keeps the service up. For
+embeddings, a vector from another model lives in a different space: mixing them silently breaks
+search.
+**Decision.** Embeddings go through the same access, data-policy, masking, budget and ledger
+steps, but a failure is returned as a failure.
+**Consequences.** An index is always built and queried with one model. Changing the embedding
+model means re-indexing, which is an explicit, planned step.
+
+## 10. Operable by default
+
+**Context.** A component that cannot be monitored or deployed repeatably stays a prototype.
+**Decision.** Metrics for Prometheus, one JSON log line per request (never content), a health
+check, a non-root container image, secrets only from the environment, and Entra ID for Azure
+OpenAI so no model key needs storing. CI builds and checks the image on every push.
+**Consequences.** The gateway drops into a standard platform (containers, a secret store, a
+metrics stack) without code changes; the cost is one more dependency (prometheus-client).

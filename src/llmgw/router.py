@@ -8,7 +8,9 @@ The decision is rule-based and explained in one sentence, so every choice can be
 3. For "auto", a complexity estimate from visible signals (length, reasoning verbs, several
    numbers, structured-output instructions, code). Complex -> strong tier, simple -> fast tier.
 4. If the preferred model is not allowed for the team, the next allowed model in the fallback
-   order is used; the remaining ones become fallbacks if the call fails.
+   order is used; the remaining ones become fallbacks if the call fails. When the preferred
+   model is local, fallbacks are local too: nobody asks for a local model to see their request
+   sent outside.
 
 The evaluation (evaluation.py) measures how often "auto" picks the tier a person would have
 picked, and what that saves.
@@ -79,6 +81,8 @@ def decide(
 
     level, signals = None, []
     if requested in config.models:
+        if not config.chat_model(requested):
+            raise RoutingError(f"'{requested}' is an embedding model; use /v1/embeddings.")
         preferred, why = requested, f"model {requested} requested"
     elif requested in TIERS:
         preferred, why = config.tier_models[requested], f"tier '{requested}' requested"
@@ -90,8 +94,10 @@ def decide(
     else:
         raise RoutingError(f"Unknown model '{requested}'. Use auto, a tier, or a model alias.")
 
+    # A request for a local model never silently leaves the building: its fallbacks stay local.
+    keep_local = local_only or not config.models[preferred].external
     order = [preferred] + [a for a in config.fallback_order if a != preferred]
-    usable = [a for a in order if _allowed(a, team, config, local_only)]
+    usable = [a for a in order if _allowed(a, team, config, keep_local)]
     if not usable:
         raise RoutingError(f"No model allowed for team '{team.name}' under its data policy.")
     chosen = usable[0]

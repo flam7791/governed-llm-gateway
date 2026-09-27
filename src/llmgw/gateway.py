@@ -5,7 +5,13 @@
     models -> cache lookup -> call the model, falling back on failure -> restore masked values
     -> record usage and cost (never the content) -> answer, with the routing reason attached
 
-Every refusal is recorded too, so the ledger shows what was blocked and why.
+Embeddings take the same governed path (access, data policy, masking, budget, ledger), with one
+difference: they never fall back to another model, because vectors from different models cannot
+be compared with each other.
+
+Every refusal is recorded too, so the ledger shows what was blocked and why. Each ledger entry is
+also written as one JSON log line (logger "llmgw.usage") and passed to observers such as the
+Prometheus metrics, so the gateway can be monitored without reading the database.
 """
 
 from __future__ import annotations
@@ -16,7 +22,8 @@ import json
 import logging
 import time
 import uuid
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
 
 from .config import GatewayConfig, TeamPolicy, hash_key
 from .ledger import Ledger, UsageEntry, month_of
@@ -25,7 +32,10 @@ from .providers import Provider, ProviderError
 from .router import RoutingError, decide
 
 log = logging.getLogger(__name__)
+usage_log = logging.getLogger("llmgw.usage")
 ROLES = {"system", "user", "assistant"}
+MAX_EMBEDDING_INPUTS = 256
+MAX_EMBEDDING_CHARS = 32_000
 
 
 class GatewayError(Exception):
@@ -77,6 +87,24 @@ class ChatResult:
     fallbacks_tried: list[str] = field(default_factory=list)
 
 
+@dataclass
+class EmbeddingRequest:
+    texts: list[str]
+    model: str = "auto"  # "auto" means the configured default embedding model
+
+
+@dataclass
+class EmbeddingResult:
+    request_id: str
+    vectors: list[list[float]]
+    model: str
+    route_reason: str
+    input_tokens: int
+    cost_usd: float
+    latency_ms: int
+    pii_masked: int
+
+
 def estimate_input_tokens(messages: list[dict]) -> int:
     """Rough pre-call estimate (about 4 characters per token), used only for budget checks."""
     return sum(len(m["content"]) // 4 + 8 for m in messages)
@@ -94,6 +122,7 @@ class Gateway:
         self.providers = providers  # model alias -> provider
         self.ledger = ledger
         self.clock = clock
+        self.observers: list[Callable[[UsageEntry], None]] = []  # e.g. Prometheus metrics
 
     # ------------------------------------------------------------------ access
 
@@ -131,22 +160,27 @@ class Gateway:
             raise BadRequest("temperature must be between 0 and 1.")
 
     def _record(self, team, request_id, model, reason, status, **values) -> None:
-        self.ledger.record(
-            UsageEntry(
-                ts=self.clock(),
-                team=team.name,
-                request_id=request_id,
-                model=model,
-                route_reason=reason,
-                input_tokens=values.get("input_tokens", 0),
-                output_tokens=values.get("output_tokens", 0),
-                cost_usd=values.get("cost_usd", 0.0),
-                latency_ms=values.get("latency_ms", 0),
-                cache_hit=values.get("cache_hit", False),
-                pii_masked=values.get("pii_masked", 0),
-                status=status,
-            )
+        entry = UsageEntry(
+            ts=self.clock(),
+            team=team.name,
+            request_id=request_id,
+            model=model,
+            route_reason=reason,
+            input_tokens=values.get("input_tokens", 0),
+            output_tokens=values.get("output_tokens", 0),
+            cost_usd=values.get("cost_usd", 0.0),
+            latency_ms=values.get("latency_ms", 0),
+            cache_hit=values.get("cache_hit", False),
+            pii_masked=values.get("pii_masked", 0),
+            status=status,
         )
+        self.ledger.record(entry)
+        usage_log.info(json.dumps(asdict(entry)))
+        for observe in self.observers:
+            try:
+                observe(entry)
+            except Exception:  # monitoring must never break a request
+                log.exception("usage observer failed")
 
     def chat(self, team: TeamPolicy, req: ChatRequest) -> ChatResult:
         request_id = uuid.uuid4().hex[:12]
@@ -264,3 +298,79 @@ class Gateway:
         message = f"All allowed models failed: {', '.join(tried)}."
         self._record(team, request_id, candidates[0], message, "provider_error")
         raise UpstreamFailed(message)
+
+    # ------------------------------------------------------------------ embeddings
+
+    def embed(self, team: TeamPolicy, req: EmbeddingRequest) -> EmbeddingResult:
+        request_id = uuid.uuid4().hex[:12]
+        texts = req.texts
+        if not texts or not all(isinstance(t, str) and t.strip() for t in texts):
+            raise BadRequest("input must be a non-empty string or list of non-empty strings.")
+        if len(texts) > MAX_EMBEDDING_INPUTS:
+            raise BadRequest(f"At most {MAX_EMBEDDING_INPUTS} inputs per request.")
+        if any(len(t) > MAX_EMBEDDING_CHARS for t in texts):
+            raise BadRequest(f"Each input must be at most {MAX_EMBEDDING_CHARS} characters.")
+
+        alias = req.model if req.model not in ("auto", "", None) else self.config.embedding_model
+        spec = self.config.models.get(alias or "")
+        if spec is None or spec.kind != "embedding":
+            raise BadRequest(f"'{alias}' is not an embedding model.")
+        reason = f"embedding model {alias}"
+
+        refusal = None
+        if not team.may_use(alias):
+            refusal = f"Model {alias} is not allowed for team '{team.name}'."
+        elif spec.external and team.data_policy == "local_only":
+            refusal = f"Team '{team.name}' keeps all data local; {alias} is external."
+        elif (
+            spec.external
+            and team.data_policy == "local_if_pii"
+            and contains_pii([{"role": "user", "content": t} for t in texts])
+        ):
+            refusal = f"Personal data detected; {alias} is external, so it was not sent."
+        if refusal:
+            self._record(team, request_id, alias, refusal, "blocked_policy")
+            raise PolicyRefused(refusal)
+
+        masker = Masker()
+        if spec.external and team.data_policy == "mask_pii":
+            texts = [masker.mask(t) for t in texts]
+            if masker.total:
+                reason += f"; {masker.total} personal data values masked"
+
+        remaining = team.monthly_budget_usd - self.ledger.spent(team.name, month_of(self.clock()))
+        estimate = sum(len(t) // 4 + 1 for t in texts)
+        if spec.cost(estimate, 0) > remaining:
+            message = f"Monthly budget reached for team '{team.name}'."
+            self._record(team, request_id, alias, message, "blocked_budget")
+            raise BudgetExceeded(message)
+
+        try:
+            result = self.providers[alias].embed(spec.model, texts)
+        except ProviderError as exc:
+            message = f"{alias} failed ({exc}); embeddings do not fall back to another model."
+            self._record(team, request_id, alias, message, "provider_error")
+            raise UpstreamFailed(message) from exc
+
+        cost = spec.cost(result.input_tokens, 0)
+        self._record(
+            team,
+            request_id,
+            alias,
+            reason,
+            "ok",
+            input_tokens=result.input_tokens,
+            cost_usd=cost,
+            latency_ms=result.latency_ms,
+            pii_masked=masker.total,
+        )
+        return EmbeddingResult(
+            request_id=request_id,
+            vectors=result.vectors,
+            model=alias,
+            route_reason=reason,
+            input_tokens=result.input_tokens,
+            cost_usd=round(cost, 8),
+            latency_ms=result.latency_ms,
+            pii_masked=masker.total,
+        )
