@@ -1,0 +1,1 @@
+{"text": "```json\n{\n  \"r1\": \"simple\",\n  \"r2\": \"complex\"\n}\n```", "input_tokens": 74, "output_tokens": 29, "latency_ms": 920, "replayed": false}

@@ -1,0 +1,1 @@
+{"text": "# R&D Spending Calculation\n\n**Country A:**\n500 billion \u00d7 2.1% = 500 \u00d7 0.021 = **10.5 billion**\n\n**Country B:**\n800 billion \u00d7 1.5% = 800 \u00d7 0.015 = **12 billion**\n\n**Difference:**\n12 - 10.5 = 1.5 billion\n\n**Answer: B; 1.5**", "input_tokens": 85, "output_tokens": 107, "latency_ms": 1580, "replayed": false}

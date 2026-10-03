@@ -1,0 +1,1 @@
+{"text": "```json\n{\n  \"meeting\": \"Digital Governance Board\",\n  \"date\": \"2027-02-03\",\n  \"participants\": 9,\n  \"decision\": \"agreed to extend the pilot by six months\"\n}\n```", "input_tokens": 81, "output_tokens": 58, "latency_ms": 796, "replayed": false}

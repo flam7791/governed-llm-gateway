@@ -153,10 +153,37 @@ llmgw eval evals/tasks.jsonl --config gateway.json --recordings evals/recordings
 The first run records every model answer (including failures). After that, the same evaluation
 replays offline, identically and for free, and CI runs it on every push.
 
-**Router agreement with human labels** needs no model calls, so it is measured already: **22 of
-24** (all 12 simple tasks routed to the fast tier; 10 of 12 complex tasks to the strong tier).
-The two misses are a formatting-constraint task and a code-reading task. Whether they matter
-depends on whether the fast model passes them anyway, which is what the live run shows.
+### Results (live run, October 2026)
+
+Claude Sonnet 5 as the strong model, Claude Haiku 4.5 as the fast one, Llama 3.1 8B through
+Ollama on a laptop as the local one. CI replays this run on every push.
+
+| Strategy | Pass rate | Cost (USD) | Cost vs strong | Avg latency | Models used |
+|---|---|---|---|---|---|
+| strong | 19/24 (79%) | 0.0124 | 100% | 1183 ms | claude-strong ×24 |
+| fast | 20/24 (83%) | 0.0046 | 37% | 875 ms | claude-fast ×24 |
+| local | 19/24 (79%) | 0.0000 | 0% | 18545 ms | local ×24 |
+| auto | **24/24 (100%)** | 0.0102 | 83% | 1012 ms | claude-fast ×14, claude-strong ×10 |
+
+**Router agreement with human labels: 22 of 24** (all 12 simple tasks routed to the fast tier;
+10 of 12 complex tasks to the strong tier). The two complex tasks routed to the fast tier were
+ones it passes anyway.
+
+What this shows:
+
+- **Routing beat every single model.** The strong model's five misses are all on simple tasks,
+  and all format: it wrapped one-word answers in bold or added an explanation where the prompt
+  asked for one word. The checks are strict on purpose, because a program reading "Lisbon"
+  breaks on "\*\*Lisbon\*\*". The fast model follows terse instructions well but fails four
+  complex tasks: one arithmetic error, and three where it ignored the requested output format or
+  length. Sending each task to the tier that suits it passed all 24, at 17% less than always using
+  the strong model.
+- **The local model is viable for some work, at a price in time.** It passed as many tasks as
+  the strong model at zero API cost, but took 18 seconds per answer on a laptop CPU. On a GPU
+  server that gap closes; for sensitive teams it is already the right default.
+- **Twenty-four tasks is a small set.** These results are directional, not a benchmark: they
+  show the method and where each model fails. The set grows with the cases that matter to the
+  teams using the gateway.
 
 ## Security and governance notes
 

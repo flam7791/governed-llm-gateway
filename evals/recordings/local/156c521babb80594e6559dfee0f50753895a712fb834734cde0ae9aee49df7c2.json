@@ -1,0 +1,1 @@
+{"text": "Here is the extracted JSON object:\n\n```\n{\n  \"meeting\": \"Digital Governance Board\",\n  \"date\": \"2027-02-03\",\n  \"participants\": 9,\n  \"decision\": \"extend the pilot by six months\"\n}\n```\n\nLet me know if you'd like me to help with anything else!", "input_tokens": 74, "output_tokens": 68, "latency_ms": 20078, "replayed": false}
