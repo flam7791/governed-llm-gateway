@@ -3,6 +3,13 @@
 All notable changes. Versions follow [semantic versioning](https://semver.org): a new minor
 version adds features without breaking existing configurations.
 
+## 0.3.0
+
+- OpenTelemetry tracing (optional `tracing` extra, in the container image): a `llmgw.chat` span
+  per request with team, data policy, routing, status, tokens and cost, and a `chat <model>`
+  child span per model call with the generative-AI semantic conventions. Incoming W3C trace
+  context is continued. No prompt or answer text on spans; off without an OTLP endpoint.
+
 ## 0.2.0
 
 - Azure OpenAI provider (v1 API), with an API key or Microsoft Entra ID (managed identity).
