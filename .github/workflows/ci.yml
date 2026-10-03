@@ -29,6 +29,8 @@ jobs:
           ruff format --check .
       - name: Tests (offline, no API key or local model needed)
         run: pytest
+      - name: Dependency vulnerability scan (the project's own dependencies)
+        run: pip install pip-audit && pip-audit .
       - name: Replay the recorded routing evaluation
         if: hashFiles('evals/recordings/**') != ''
         run: |
