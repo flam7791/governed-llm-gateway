@@ -1,5 +1,7 @@
 # governed-llm-gateway
 
+[![CI](https://github.com/flam7791/governed-llm-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/flam7791/governed-llm-gateway/actions/workflows/ci.yml) [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE) ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)
+
 A small internal **LLM gateway**: one governed entry point for every model call in an
 organisation. Applications call the gateway instead of calling models directly, and the gateway:
 
