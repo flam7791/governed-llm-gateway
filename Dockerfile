@@ -15,7 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
-RUN pip install --no-cache-dir ".[azure]"
+RUN pip install --no-cache-dir ".[azure,tracing]"
 
 RUN useradd --create-home --uid 10001 appuser && mkdir -p /data /config \
     && chown appuser /data

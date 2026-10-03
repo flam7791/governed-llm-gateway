@@ -25,11 +25,15 @@ import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 
+from opentelemetry import trace
+from opentelemetry.trace import SpanKind, Status, StatusCode
+
 from .config import GatewayConfig, TeamPolicy, hash_key
 from .ledger import Ledger, UsageEntry, month_of
 from .pii import Masker, contains_pii
 from .providers import Provider, ProviderError
 from .router import RoutingError, decide
+from .tracing import tracer
 
 log = logging.getLogger(__name__)
 usage_log = logging.getLogger("llmgw.usage")
@@ -176,6 +180,22 @@ class Gateway:
         )
         self.ledger.record(entry)
         usage_log.info(json.dumps(asdict(entry)))
+        span = trace.get_current_span()
+        span.set_attributes(
+            {
+                "llmgw.request_id": request_id,
+                "llmgw.status": status,
+                "llmgw.model_alias": model,
+                "llmgw.route_reason": reason,
+                "llmgw.cost_usd": entry.cost_usd,
+                "llmgw.cache_hit": entry.cache_hit,
+                "llmgw.pii_masked": entry.pii_masked,
+                "gen_ai.usage.input_tokens": entry.input_tokens,
+                "gen_ai.usage.output_tokens": entry.output_tokens,
+            }
+        )
+        if status != "ok":
+            span.set_status(Status(StatusCode.ERROR, status))
         for observe in self.observers:
             try:
                 observe(entry)
@@ -183,6 +203,18 @@ class Gateway:
                 log.exception("usage observer failed")
 
     def chat(self, team: TeamPolicy, req: ChatRequest) -> ChatResult:
+        with tracer.start_as_current_span("llmgw.chat", kind=SpanKind.SERVER) as span:
+            span.set_attributes(
+                {
+                    "llmgw.team": team.name,
+                    "llmgw.data_policy": team.data_policy,
+                    "gen_ai.operation.name": "chat",
+                    "gen_ai.request.model": req.model or "auto",
+                }
+            )
+            return self._chat(team, req)
+
+    def _chat(self, team: TeamPolicy, req: ChatRequest) -> ChatResult:
         request_id = uuid.uuid4().hex[:12]
         self._validate(req)
         has_pii = contains_pii(req.messages)
@@ -258,9 +290,29 @@ class Gateway:
                     )
 
             try:
-                completion = self.providers[alias].complete(
-                    spec.model, outbound, req.max_tokens, req.temperature
-                )
+                with tracer.start_as_current_span(
+                    f"chat {spec.model}", kind=SpanKind.CLIENT
+                ) as call:
+                    call.set_attributes(
+                        {
+                            "gen_ai.operation.name": "chat",
+                            "gen_ai.provider.name": spec.provider,
+                            "gen_ai.request.model": spec.model,
+                            "gen_ai.request.max_tokens": req.max_tokens,
+                            "gen_ai.request.temperature": req.temperature,
+                            "llmgw.model_alias": alias,
+                            "llmgw.model_external": spec.external,
+                        }
+                    )
+                    completion = self.providers[alias].complete(
+                        spec.model, outbound, req.max_tokens, req.temperature
+                    )
+                    call.set_attributes(
+                        {
+                            "gen_ai.usage.input_tokens": completion.input_tokens,
+                            "gen_ai.usage.output_tokens": completion.output_tokens,
+                        }
+                    )
             except ProviderError as exc:
                 log.warning("model %s failed: %s", alias, exc)
                 tried.append(alias)
@@ -302,6 +354,17 @@ class Gateway:
     # ------------------------------------------------------------------ embeddings
 
     def embed(self, team: TeamPolicy, req: EmbeddingRequest) -> EmbeddingResult:
+        with tracer.start_as_current_span("llmgw.embeddings", kind=SpanKind.SERVER) as span:
+            span.set_attributes(
+                {
+                    "llmgw.team": team.name,
+                    "gen_ai.operation.name": "embeddings",
+                    "gen_ai.request.model": req.model or "auto",
+                }
+            )
+            return self._embed(team, req)
+
+    def _embed(self, team: TeamPolicy, req: EmbeddingRequest) -> EmbeddingResult:
         request_id = uuid.uuid4().hex[:12]
         texts = req.texts
         if not texts or not all(isinstance(t, str) and t.strip() for t in texts):

@@ -20,7 +20,7 @@ from fastapi import Depends, FastAPI, Header, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict
 
-from . import __version__
+from . import __version__, tracing
 from .config import TIERS, TeamPolicy
 from .gateway import AuthError, BadRequest, ChatRequest, EmbeddingRequest, Gateway, GatewayError
 from .metrics import Metrics
@@ -70,10 +70,17 @@ def create_app(gateway: Gateway, metrics_token: str | None = None) -> FastAPI:
         )
 
     @app.post("/v1/chat/completions")
-    def chat_completions(body: ChatCompletionBody, caller: Annotated[TeamPolicy, Depends(team)]):
+    def chat_completions(
+        body: ChatCompletionBody, caller: Annotated[TeamPolicy, Depends(team)], request: Request
+    ):
         if body.stream:
             raise BadRequest("Streaming is not supported by this gateway version.")
-        result = gateway.chat(
+        with tracing.incoming(request.headers):
+            result = _chat(body, caller)
+        return _chat_response(body, result)
+
+    def _chat(body: ChatCompletionBody, caller: TeamPolicy):
+        return gateway.chat(
             caller,
             ChatRequest(
                 messages=[{"role": m.role, "content": m.text()} for m in body.messages],
@@ -82,6 +89,8 @@ def create_app(gateway: Gateway, metrics_token: str | None = None) -> FastAPI:
                 temperature=body.temperature,
             ),
         )
+
+    def _chat_response(body: ChatCompletionBody, result):
         content = {
             "id": f"chatcmpl-{result.request_id}",
             "object": "chat.completion",
@@ -116,9 +125,12 @@ def create_app(gateway: Gateway, metrics_token: str | None = None) -> FastAPI:
         return JSONResponse(content=content, headers=headers)
 
     @app.post("/v1/embeddings")
-    def embeddings(body: EmbeddingsBody, caller: Annotated[TeamPolicy, Depends(team)]):
+    def embeddings(
+        body: EmbeddingsBody, caller: Annotated[TeamPolicy, Depends(team)], request: Request
+    ):
         texts = [body.input] if isinstance(body.input, str) else body.input
-        result = gateway.embed(caller, EmbeddingRequest(texts=texts, model=body.model))
+        with tracing.incoming(request.headers):
+            result = gateway.embed(caller, EmbeddingRequest(texts=texts, model=body.model))
         return JSONResponse(
             content={
                 "object": "list",

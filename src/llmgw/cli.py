@@ -55,8 +55,11 @@ def _serve(args) -> int:
 
     import uvicorn
 
+    from . import tracing
     from .api import create_app
     from .factory import build_gateway
+
+    tracing.configure("governed-llm-gateway")
 
     # One JSON line per request (no content) on stdout, for the platform's log collector.
     usage = logging.getLogger("llmgw.usage")
