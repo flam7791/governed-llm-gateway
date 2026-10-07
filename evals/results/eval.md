@@ -1,5 +1,7 @@
 # Routing evaluation: tasks.jsonl
 
+Router for auto: rules.
+
 | Strategy | Pass rate | Cost (USD) | Cost vs strong | Avg latency | Models used |
 |---|---|---|---|---|---|
 | strong | 19/24 (79%) | 0.0124 | 100% | 1183 ms | claude-strong ×24 |
@@ -7,7 +9,9 @@
 | local | 19/24 (79%) | 0.0000 | 0% | 18545 ms | local ×24 |
 | auto | 24/24 (100%) | 0.0102 | 83% | 1012 ms | claude-fast ×14, claude-strong ×10 |
 
-Router versus human difficulty labels (label -> router estimate): complex->complex: 10, complex->simple: 2, simple->simple: 12, simple->complex: 0
+Rules versus human difficulty labels (label -> rules estimate): complex->complex: 10, complex->simple: 2, simple->simple: 12, simple->complex: 0
+
+Auto routing agreement with human labels: 22/24 (strong tier for complex tasks, fast or local for simple ones)
 
 **strong**
 - failed s02: '**Lisbon**'

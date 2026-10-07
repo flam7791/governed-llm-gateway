@@ -92,3 +92,21 @@ check, a non-root container image, secrets only from the environment, and Entra 
 OpenAI so no model key needs storing. CI builds and checks the image on every push.
 **Consequences.** The gateway drops into a standard platform (containers, a secret store, a
 metrics stack) without code changes; the cost is one more dependency (prometheus-client).
+
+## 11. A judged router as an option, with a local judge only
+
+**Context.** The rule-based complexity estimate agrees with human labels on 22 of 24 tasks; its
+misses are hard tasks that look simple (short, no reasoning verbs). A model reads the request
+rather than its surface, but a model in the routing path adds latency and, if it were external,
+a route out of the organisation before the data policy has decided anything.
+**Decision.** Router mode `judged` (off by default): a model answers `simple` or `complex` with a
+confidence, as a bounded judgment. Anything outside those two answers, a confidence below
+`min_confidence`, or a failed call leaves the decision to the rules, and the route reason says
+which happened. The judge must be a local model (configuration refuses an external one), local-
+only teams are not judged (every route is local anyway), and the data policy is applied after
+the judgment, so a prompt that talks the judge into "complex" can raise the cost of its own
+answer, never change where it may go. The judge's cost is added to the request's cost.
+**Consequences.** Better routing only where the evaluation shows it: compare `--router judged`
+with the rules on `evals/tasks.jsonl` before turning it on. Until a judged run is recorded the
+README reports no result for it. A trained classifier on logged routes stays on the roadmap; the
+judged mode gives the labelled data and the evaluation it would need.

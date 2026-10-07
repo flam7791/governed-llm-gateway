@@ -26,7 +26,9 @@ cost, latency, route reason and status, never prompt or answer text.
 ## How it can fail
 
 - The complexity router sends a hard task to the fast tier (2 of 24 in the recorded evaluation;
-  both passed anyway).
+  both passed anyway). In `judged` mode a local model can misjudge too; a low confidence, an
+  invalid answer or a failure falls back to the rules, and the data policy is applied after the
+  judgment either way.
 - Personal data the detectors do not cover (names, addresses) reaches an external model under
   `mask_pii`: use `local_only` or `local_if_pii` for such teams.
 - Budget checks use a pre-call estimate; the actual cost is recorded after the call.

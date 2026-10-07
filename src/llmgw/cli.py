@@ -135,6 +135,22 @@ def _eval(args) -> int:
     from .providers import ReplayMiss
 
     config = _load(args)
+    if args.router:
+        from dataclasses import replace
+
+        from .config import RouterSettings
+
+        router = RouterSettings(
+            mode=args.router,
+            judge_model=args.judge_model or config.router.judge_model,
+            min_confidence=(
+                args.min_confidence
+                if args.min_confidence is not None
+                else config.router.min_confidence
+            ),
+        )
+        config = replace(config, router=router)
+        config.validate()
     tasks = load_tasks(Path(args.tasks))
     recordings = Path(args.recordings) if args.recordings else None
     providers = build_providers(config, recordings=recordings, offline=args.offline)
@@ -144,7 +160,16 @@ def _eval(args) -> int:
     except ReplayMiss as exc:
         print(f"Replay incomplete: {exc} Record again without --offline.", file=sys.stderr)
         return 3
-    text = f"# Routing evaluation: {Path(args.tasks).name}\n\n" + report(results, tasks)
+    router = config.router
+    mode = (
+        f"judged by {router.judge_model}, confidence >= {router.min_confidence}"
+        if router.mode == "judged"
+        else "rules"
+    )
+    text = (
+        f"# Routing evaluation: {Path(args.tasks).name}\n\nRouter for auto: {mode}.\n\n"
+        + report(results, tasks)
+    )
     print(text)
     if args.out:
         out = Path(args.out)
@@ -188,6 +213,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--recordings", help="record model answers here, for offline replay")
     p.add_argument("--offline", action="store_true", help="replay recordings only")
     p.add_argument("--out")
+    p.add_argument(
+        "--router", choices=["rules", "judged"], help="override the config's router mode for auto"
+    )
+    p.add_argument("--judge-model", help="local model alias that judges difficulty (judged mode)")
+    p.add_argument("--min-confidence", type=float, help="judge confidence needed (default 0.7)")
 
     args = parser.parse_args(argv)
     logging.basicConfig(

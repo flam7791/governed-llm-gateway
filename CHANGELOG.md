@@ -3,6 +3,18 @@
 All notable changes. Versions follow [semantic versioning](https://semver.org): a new minor
 version adds features without breaking existing configurations.
 
+## 0.4.0
+
+- Router mode `judged` (off by default): a local model classifies `auto` requests as `simple` or
+  `complex` with a confidence. An invalid answer, a low confidence or a failure leaves it to the
+  rules, and the route reason says so. An external judge is refused by configuration; local-only
+  teams are not judged; the data policy applies after the judgment; the judge's cost is part of
+  the request's cost.
+- `llmgw eval --router judged --judge-model ALIAS [--min-confidence X]` compares it with the
+  rules on the same tasks; the report adds the auto strategy's agreement with the human labels.
+  No judged run is recorded yet.
+- `AGENTS.md` for coding agents; `CLAUDE.md` imports it.
+
 ## 0.3.0
 
 - OpenTelemetry tracing (optional `tracing` extra, in the container image): a `llmgw.chat` span

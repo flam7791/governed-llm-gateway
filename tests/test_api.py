@@ -82,4 +82,4 @@ def test_models_and_usage_endpoints(tmp_path):
     )
     usage = c.get("/v1/usage", headers=AUTH).json()
     assert usage["team"] == "research" and usage["spent_usd"] > 0
-    assert c.get("/healthz").json() == {"status": "ok", "version": "0.3.0"}
+    assert c.get("/healthz").json() == {"status": "ok", "version": "0.4.0"}

@@ -63,6 +63,25 @@ class TeamPolicy:
         return "*" in self.allowed_models or alias in self.allowed_models
 
 
+ROUTER_MODES = ("rules", "judged")
+
+
+@dataclass(frozen=True)
+class RouterSettings:
+    """How "auto" estimates difficulty.
+
+    rules   visible signals in the prompt (length, reasoning verbs, numbers, code); the default
+    judged  a local model answers "simple" or "complex" with a confidence; below
+            min_confidence, or on any failure or invalid answer, the rules decide
+    The judge must be a local model: it reads every "auto" prompt before the data policy has
+    chosen where the request may go, so it must not be a route out of the organisation.
+    """
+
+    mode: str = "rules"
+    judge_model: str | None = None
+    min_confidence: float = 0.7
+
+
 @dataclass(frozen=True)
 class GatewayConfig:
     models: dict[str, ModelSpec]
@@ -74,6 +93,7 @@ class GatewayConfig:
     db_path: Path = Path("gateway.db")
     cache_ttl_seconds: int = 24 * 3600
     max_output_tokens: int = 4000
+    router: RouterSettings = field(default_factory=RouterSettings)
     extra: dict = field(default_factory=dict)
 
     @classmethod
@@ -109,6 +129,7 @@ class GatewayConfig:
             db_path=db,
             cache_ttl_seconds=int(data.get("cache_ttl_seconds", 24 * 3600)),
             max_output_tokens=int(data.get("max_output_tokens", 4000)),
+            router=RouterSettings(**data.get("router", {})),
         )
         config.validate()
         return config
@@ -139,6 +160,19 @@ class GatewayConfig:
         for alias in self.fallback_order:
             if not self.chat_model(alias):
                 raise ValueError(f"fallback_order: unknown chat model {alias}")
+        router = self.router
+        if router.mode not in ROUTER_MODES:
+            raise ValueError(f"router.mode must be one of {ROUTER_MODES}")
+        if router.mode == "judged":
+            if not router.judge_model or not self.chat_model(router.judge_model):
+                raise ValueError("router.judge_model must be a chat model alias")
+            if self.models[router.judge_model].external:
+                raise ValueError(
+                    f"router.judge_model {router.judge_model} is external: the judge reads every "
+                    "auto request before the data policy applies, so it must be a local model"
+                )
+        if not 0.0 <= router.min_confidence <= 1.0:
+            raise ValueError("router.min_confidence must be between 0 and 1")
         if self.embedding_model and (
             self.embedding_model not in self.models
             or self.models[self.embedding_model].kind != "embedding"

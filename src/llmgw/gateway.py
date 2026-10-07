@@ -32,7 +32,7 @@ from .config import GatewayConfig, TeamPolicy, hash_key
 from .ledger import Ledger, UsageEntry, month_of
 from .pii import Masker, contains_pii
 from .providers import Provider, ProviderError
-from .router import RoutingError, decide
+from .router import Judgment, RoutingError, decide, judge_messages, parse_judgment
 from .tracing import tracer
 
 log = logging.getLogger(__name__)
@@ -202,6 +202,41 @@ class Gateway:
             except Exception:  # monitoring must never break a request
                 log.exception("usage observer failed")
 
+    def _judge(self, team: TeamPolicy, req: ChatRequest) -> Judgment | None:
+        """Router mode "judged": a local model classifies an "auto" request as simple or complex.
+
+        Bounded: two allowed answers and a confidence. A failed call, an answer outside that set
+        or a confidence below the threshold returns a Judgment without a level, and the rules
+        decide. The judge is local by configuration, so this call never leaves the
+        organisation; and the data policy is applied after it, so a prompt that talks the judge
+        into "complex" can raise the cost of its own answer, never change where it may go.
+        """
+        settings = self.config.router
+        if settings.mode != "judged" or req.model not in ("auto", "", None):
+            return None
+        if team.data_policy == "local_only":
+            return None  # every route is local anyway: a judgment would change nothing
+        alias = settings.judge_model
+        spec = self.config.models[alias]
+        with tracer.start_as_current_span(f"judge {spec.model}", kind=SpanKind.CLIENT) as call:
+            try:
+                completion = self.providers[alias].complete(
+                    spec.model, judge_messages(req.messages), 60, 0.0
+                )
+            except ProviderError as exc:
+                log.warning("router judge %s failed: %s", alias, exc)
+                return Judgment(None, note="judge unavailable, rules used")
+            cost = spec.cost(completion.input_tokens, completion.output_tokens)
+            try:
+                level, confidence = parse_judgment(completion.text)
+            except ValueError:
+                return Judgment(None, note="judge answer not valid, rules used", cost_usd=cost)
+            call.set_attributes({"llmgw.judge_level": level, "llmgw.judge_confidence": confidence})
+        if confidence < settings.min_confidence:
+            note = f"judge unsure ({level}, {confidence:.2f}), rules used"
+            return Judgment(None, confidence, note, cost)
+        return Judgment(level, confidence, cost_usd=cost)
+
     def chat(self, team: TeamPolicy, req: ChatRequest) -> ChatResult:
         with tracer.start_as_current_span("llmgw.chat", kind=SpanKind.SERVER) as span:
             span.set_attributes(
@@ -219,8 +254,10 @@ class Gateway:
         self._validate(req)
         has_pii = contains_pii(req.messages)
 
+        judgment = self._judge(team, req)
+        judge_cost = judgment.cost_usd if judgment else 0.0
         try:
-            decision = decide(req.model, req.messages, team, self.config, has_pii)
+            decision = decide(req.model, req.messages, team, self.config, has_pii, judgment)
         except RoutingError as exc:
             self._record(team, request_id, "-", str(exc), "blocked_policy")
             raise PolicyRefused(str(exc)) from exc
@@ -272,6 +309,7 @@ class Gateway:
                         alias,
                         note,
                         "ok",
+                        cost_usd=judge_cost,
                         cache_hit=True,
                         pii_masked=masker.total,
                     )
@@ -282,7 +320,7 @@ class Gateway:
                         note,
                         0,
                         0,
-                        0.0,
+                        round(judge_cost, 6),
                         0,
                         True,
                         masker.total,
@@ -318,7 +356,8 @@ class Gateway:
                 tried.append(alias)
                 continue
 
-            cost = spec.cost(completion.input_tokens, completion.output_tokens)
+            # The judge's cost (zero for an unpriced local model) is part of this request's cost.
+            cost = spec.cost(completion.input_tokens, completion.output_tokens) + judge_cost
             if req.temperature == 0:
                 self.ledger.cache_put(key, {"text": completion.text})  # stored masked
             self._record(

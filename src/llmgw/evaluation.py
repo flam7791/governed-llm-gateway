@@ -195,9 +195,16 @@ def report(results: list[StrategyResult], tasks: list[dict]) -> str:
     confusion = router_confusion(tasks)
     lines += [
         "",
-        "Router versus human difficulty labels (label -> router estimate): "
+        "Rules versus human difficulty labels (label -> rules estimate): "
         + ", ".join(f"{k}: {v}" for k, v in confusion.items()),
     ]
+    auto = next((r for r in results if r.strategy == "auto"), None)
+    if auto and auto.total:
+        lines += [
+            "",
+            f"Auto routing agreement with human labels: {auto.routing_correct}/{auto.total} "
+            "(strong tier for complex tasks, fast or local for simple ones)",
+        ]
     for r in results:
         if r.errors or r.failures:
             lines += ["", f"**{r.strategy}**"]

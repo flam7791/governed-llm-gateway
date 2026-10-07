@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "governed-llm-gateway"
-version = "0.3.0"
+version = "0.4.0"
 description = "A small internal LLM gateway: routes each request to the cheapest adequate model (Claude, Azure OpenAI or a local open-weight model), masks personal data, enforces team budgets, produces chargeback reports and exposes Prometheus metrics."
 readme = "README.md"
 license = "MIT"

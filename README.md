@@ -187,6 +187,37 @@ What this shows:
   show the method and where each model fails. The set grows with the cases that matter to the
   teams using the gateway.
 
+## Judged routing (0.4)
+
+The rules miss hard tasks that look simple: short prompts with no reasoning words. Router mode
+`judged` asks a **local** model instead, as a bounded judgment: it answers `simple` or
+`complex` with a confidence, and nothing else counts.
+
+```json
+"router": {"mode": "judged", "judge_model": "local", "min_confidence": 0.7}
+```
+
+- **Anything outside the two answers is no decision.** An invalid reply, a confidence below
+  `min_confidence` or a failed call leaves it to the rules, and the route reason says which
+  ("judge unsure (complex, 0.55), rules used").
+- **The judge is local, by configuration.** It reads every `auto` request before the data policy
+  has chosen a route, so an external judge is refused at startup. Local-only teams are not
+  judged: every route is local anyway.
+- **The data policy comes after the judgment.** A prompt that talks the judge into "complex" can
+  raise the cost of its own answer; it cannot change where the request may go.
+- **Its cost is counted.** A priced local model's judge tokens are added to the request's cost.
+
+Measure it on the same tasks before turning it on:
+
+```bash
+llmgw eval evals/tasks.jsonl --config gateway.json --strategies auto \
+  --router judged --judge-model local --recordings evals/recordings --out evals/results-judged
+```
+
+The report gives the auto strategy's pass rate, cost and latency, and its agreement with the
+human labels, next to the rules (22/24 in the recorded run). **Not measured yet:** no judged run
+has been recorded, so there is no result to report here.
+
 ## Tracing (0.3)
 
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` (for example `http://localhost:4318`, a Jaeger or Grafana Tempo
@@ -219,8 +250,10 @@ Without an endpoint, tracing is off and costs nothing.
 ## Limitations and roadmap
 
 - [ ] Streaming responses
+- [x] A judged router: a local model classifies difficulty as a bounded judgment, with the rules
+      as fallback (0.4). Next: record a judged run and compare it with the rules
 - [ ] A learned router (a small classifier trained on logged routes and outcomes) compared with
-      the rule-based one on the same task set
+      the rule-based and judged ones on the same task set
 - [ ] Named-entity detection for personal data (names, addresses) with a local model
 - [ ] Per-team rate limits
 - [x] Prometheus metrics, JSON usage logs, container image (0.2)
@@ -233,7 +266,7 @@ Without an endpoint, tracing is off and costs nothing.
 ```
 src/llmgw/
   gateway.py     the pipeline: auth, policy, budget, masking, cache, fallback, ledger
-  router.py      explainable routing rules and the complexity estimate
+  router.py      explainable routing rules, the complexity estimate, the optional judge
   pii.py         reversible masking of personal data
   providers.py   Anthropic, Azure OpenAI, OpenAI-compatible (Ollama, vLLM...), record/replay
   metrics.py     Prometheus metrics
