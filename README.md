@@ -215,8 +215,36 @@ llmgw eval evals/tasks.jsonl --config gateway.json --strategies auto \
 ```
 
 The report gives the auto strategy's pass rate, cost and latency, and its agreement with the
-human labels, next to the rules (22/24 in the recorded run). **Not measured yet:** no judged run
-has been recorded, so there is no result to report here.
+human labels, next to the rules.
+
+### Results (live run, October 2026): the rules stay the default
+
+Llama 3.1 8B through Ollama on a laptop CPU as the judge; the answers come from the same recorded
+Claude Haiku 4.5 and Sonnet 5 runs as the table above. `evals/results-judged/eval.md` has the
+report; CI replays it.
+
+| Router for auto | Pass rate | Cost (USD) | Agreement with human labels | Models used |
+|---|---|---|---|---|
+| rules | **24/24** | 0.0102 | **22/24** | claude-fast ×14, claude-strong ×10 |
+| judged by Llama 3.1 8B | 21/24 | 0.0049 | 14/24 | claude-fast ×22, claude-strong ×2 |
+
+- **The judge called almost everything simple, and was sure of it.** 22 of 24 tasks were judged
+  `simple`, every one with confidence 0.9 or 1.0, including 10 of the 12 complex tasks. Only
+  one complex task was judged `complex`. The confidence threshold (0.7) never came into play:
+  every judgment cleared it. This is the failure P7 warns about, a valid value that is wrong with
+  high confidence, and a stated confidence that carries no information.
+- **The closed answer set caught the one malformed reply.** On one complex task the judge
+  answered twice in one reply (`simple`, then `complex`); that counted as no decision and the
+  rules routed it to the strong tier, which is one of the two strong routes above.
+- **Cheaper, and wrong where it matters.** Half the cost of the rules, because hard tasks went to
+  the fast model, which failed three of them (an arithmetic answer, and two that ignored the
+  requested format). A router that saves money by sending hard work to a weaker model is not
+  saving money.
+- **An upgrade-only judge would add nothing here.** Letting the judge only move a request up a
+  tier (never down) gives exactly the rules' routing on this set, since the one task it judged
+  `complex` the rules already sent to the strong tier.
+- **What would change the conclusion:** a stronger or differently prompted judge, measured the
+  same way. Until a judge beats 22/24 on this set, `judged` stays off.
 
 ## Tracing (0.3)
 
@@ -251,7 +279,8 @@ Without an endpoint, tracing is off and costs nothing.
 
 - [ ] Streaming responses
 - [x] A judged router: a local model classifies difficulty as a bounded judgment, with the rules
-      as fallback (0.4). Next: record a judged run and compare it with the rules
+      as fallback (0.4). Measured with Llama 3.1 8B: 14/24 agreement against the rules' 22/24,
+      so the rules stay the default
 - [ ] A learned router (a small classifier trained on logged routes and outcomes) compared with
       the rule-based and judged ones on the same task set
 - [ ] Named-entity detection for personal data (names, addresses) with a local model

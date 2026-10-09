@@ -3,6 +3,13 @@
 All notable changes. Versions follow [semantic versioning](https://semver.org): a new minor
 version adds features without breaking existing configurations.
 
+## Unreleased
+
+- First judged-routing run, Llama 3.1 8B as the judge, recorded and replayed in CI: 21/24 tasks
+  passed and 14/24 routed as a person would, against 24/24 and 22/24 for the rules. The judge
+  called 22 of 24 tasks simple with confidence 0.9 to 1.0. The rules stay the default; results
+  in the README.
+
 ## 0.4.0
 
 - Router mode `judged` (off by default): a local model classifies `auto` requests as `simple` or

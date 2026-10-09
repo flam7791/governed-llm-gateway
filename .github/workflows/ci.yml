@@ -36,6 +36,9 @@ jobs:
         run: |
           cp gateway.example.json gateway.json
           llmgw eval evals/tasks.jsonl --config gateway.json --recordings evals/recordings --offline
+          # The judged router's recorded run (Llama 3.1 8B as the judge)
+          llmgw eval evals/tasks.jsonl --config gateway.json --recordings evals/recordings --offline \
+            --strategies auto --router judged --judge-model local
 
   container:
     runs-on: ubuntu-latest

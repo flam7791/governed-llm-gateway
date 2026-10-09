@@ -1,0 +1,1 @@
+{"text": "{\"tier\": \"simple\", \"confidence\": 0.9} \n{\"tier\": \"complex\", \"confidence\": 0.8}", "input_tokens": 192, "output_tokens": 30, "latency_ms": 14910, "replayed": false}
