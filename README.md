@@ -21,6 +21,15 @@ organisation. Applications call the gateway instead of calling models directly, 
 > adjust; the local model runs through [Ollama](https://ollama.com) or any OpenAI-compatible
 > server.
 
+> **Part of a portfolio.** Implements platform component [C1][aief-c1] (with [P7][aief-p7] for its
+> optional judged router) of the [AI engineering framework][aief], at its *Industrialise* stage.
+> [All repositories][aief-all].
+
+[aief]: https://github.com/flam7791/ai-engineering-framework
+[aief-all]: https://github.com/flam7791
+[aief-c1]: https://github.com/flam7791/ai-engineering-framework/blob/main/docs/patterns.md#c1-model-gateway
+[aief-p7]: https://github.com/flam7791/ai-engineering-framework/blob/main/docs/patterns.md#p7-bounded-judgment-a-typed-decision-from-a-closed-answer-set
+
 ## Why a gateway
 
 When every team calls model APIs directly, an organisation cannot answer basic questions: who
