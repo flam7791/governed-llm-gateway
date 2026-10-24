@@ -175,9 +175,10 @@ llmgw serve --config gateway.json
 Nothing else changes: `legal` stays on the local model whatever it asks for, `communications`
 stays local when a request contains personal data, and `research` has personal data masked before
 a request reaches Mistral's API, as the tests check. Without a key, the Mistral models are
-unavailable and routing falls back to the next allowed model, saying so in the route reason. No
-live run on Mistral models is recorded yet: when one is, it is reported here from the evaluation
-output, like the runs below.
+unavailable and routing falls back to the next allowed model, saying so in the route reason.
+Measured so far: Ministral 3 8B as the local judge of request difficulty, on a laptop CPU
+([judged routing](#judged-routing-04): 17 of 24 routed as a person would, against the rules'
+22). The API tiers are not measured yet.
 
 ## Evaluation: is "auto" worth it?
 
@@ -256,16 +257,18 @@ llmgw eval evals/tasks.jsonl --config gateway.json --strategies auto \
 The report gives the auto strategy's pass rate, cost and latency, and its agreement with the
 human labels, next to the rules.
 
-### Results (live run, October 2026): the rules stay the default
+### Results (live runs, October 2026): the rules stay the default
 
-Llama 3.1 8B through Ollama on a laptop CPU as the judge; the answers come from the same recorded
-Claude Haiku 4.5 and Sonnet 5 runs as the table above. `evals/results-judged/eval.md` has the
-report; CI replays it.
+Llama 3.1 8B, then Mistral's Ministral 3 8B, through Ollama on a laptop CPU as the judge; the
+answers come from the same recorded Claude Haiku 4.5 and Sonnet 5 runs as the table above.
+`evals/results-judged/eval.md` and `evals/results-judged-ministral-3-8b/eval.md` have the reports;
+CI replays both.
 
 | Router for auto | Pass rate | Cost (USD) | Agreement with human labels | Models used |
 |---|---|---|---|---|
 | rules | **24/24** | 0.0102 | **22/24** | claude-fast ×14, claude-strong ×10 |
 | judged by Llama 3.1 8B | 21/24 | 0.0049 | 14/24 | claude-fast ×22, claude-strong ×2 |
+| judged by Ministral 3 8B | 22/24 | 0.0084 | 17/24 | claude-fast ×19, claude-strong ×5 |
 
 - **The judge called almost everything simple, and was sure of it.** 22 of 24 tasks were judged
   `simple`, every one with confidence 0.9 or 1.0, including 10 of the 12 complex tasks. Only
@@ -275,6 +278,11 @@ report; CI replays it.
 - **The closed answer set caught the one malformed reply.** On one complex task the judge
   answered twice in one reply (`simple`, then `complex`); that counted as no decision and the
   rules routed it to the strong tier, which is one of the two strong routes above.
+- **Ministral judged better than Llama, with the same blind spot.** It called 19 of 24 tasks
+  `simple`, seven of the twelve complex tasks among them, every judgment with confidence 0.95
+  to 1.0. Its four `complex` calls were all right, and one reply that gave two answers counted as
+  no decision and went to the rules. Of the seven hard tasks it sent to the fast tier, two
+  failed (c03 and c09), so it passed 22 of 24 at 82% of the rules' cost.
 - **Cheaper, and wrong where it matters.** Half the cost of the rules, because hard tasks went to
   the fast model, which failed three of them (an arithmetic answer, and two that ignored the
   requested format). A router that saves money by sending hard work to a weaker model is not
@@ -283,7 +291,8 @@ report; CI replays it.
   tier (never down) gives exactly the rules' routing on this set, since the one task it judged
   `complex` the rules already sent to the strong tier.
 - **What would change the conclusion:** a stronger or differently prompted judge, measured the
-  same way. Until a judge beats 22/24 on this set, `judged` stays off.
+  same way. Ministral 3 8B came closer (17/24) without beating the rules; until a judge beats
+  22/24 on this set, `judged` stays off.
 
 ## Tracing (0.3)
 
@@ -318,8 +327,8 @@ Without an endpoint, tracing is off and costs nothing.
 
 - [ ] Streaming responses
 - [x] A judged router: a local model classifies difficulty as a bounded judgment, with the rules
-      as fallback (0.4). Measured with Llama 3.1 8B: 14/24 agreement against the rules' 22/24,
-      so the rules stay the default
+      as fallback (0.4). Measured with Llama 3.1 8B (14/24) and Ministral 3 8B (17/24) against
+      the rules' 22/24, so the rules stay the default
 - [ ] A learned router (a small classifier trained on logged routes and outcomes) compared with
       the rule-based and judged ones on the same task set
 - [ ] Named-entity detection for personal data (names, addresses) with a local model

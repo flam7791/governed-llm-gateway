@@ -6,7 +6,7 @@ abstract: "A small internal LLM gateway: routes each request to the cheapest ade
 authors:
   - given-names: Flavio
     family-names: Mericio
-version: 0.5.0
+version: 0.5.1
 date-released: "2026-10-24"
 license: MIT
 repository-code: "https://github.com/flam7791/governed-llm-gateway"

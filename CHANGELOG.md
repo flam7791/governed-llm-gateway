@@ -3,6 +3,15 @@
 All notable changes. Versions follow [semantic versioning](https://semver.org): a new minor
 version adds features without breaking existing configurations.
 
+## 0.5.1
+
+- Judged-routing run with Mistral's Ministral 3 8B as the judge (laptop CPU, the same recorded
+  Claude answers), replayed in CI: 22/24 tasks passed and 17/24 routed as a person would,
+  against 21/24 and 14/24 with Llama 3.1 8B and 24/24 and 22/24 for the rules. It called 19 of
+  24 tasks simple with confidence 0.95 to 1.0, seven complex ones among them. The rules stay the
+  default; results in the README.
+- No change to the gateway's code.
+
 ## 0.5.0
 
 - Mistral AI as a provider (`"provider": "mistral"`): Mistral's public API by default, or a

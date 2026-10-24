@@ -1,0 +1,1 @@
+{"text": "```json\n{\n  \"tier\": \"simple\",\n  \"confidence\": 0.99\n}\n```", "input_tokens": 207, "output_tokens": 26, "latency_ms": 10562, "replayed": false}

@@ -39,6 +39,10 @@ jobs:
           # The judged router's recorded run (Llama 3.1 8B as the judge)
           llmgw eval evals/tasks.jsonl --config gateway.json --recordings evals/recordings --offline \
             --strategies auto --router judged --judge-model local
+          # The same with Mistral's Ministral 3 8B as the judge (same Claude answers)
+          python -c "import json; d = json.load(open('gateway.example.json')); [m.update(model='ministral-3:8b') for m in d['models'] if m['alias'] == 'local']; json.dump(d, open('gateway.ministral-judge.json', 'w'))"
+          llmgw eval evals/tasks.jsonl --config gateway.ministral-judge.json --recordings evals/recordings \
+            --offline --strategies auto --router judged --judge-model local
 
   container:
     runs-on: ubuntu-latest
