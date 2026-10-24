@@ -11,8 +11,9 @@ Teams are the unit of access, budget and policy. Each team has:
 - what happens when the budget runs out: "block", or "degrade" to a cheaper model.
 
 Models are chat models (routed by tier) or embedding models (used by /v1/embeddings). Providers:
-anthropic (Claude), azure_openai (Azure OpenAI / Microsoft Foundry, v1 API, key or Entra ID) and
-openai_compatible (Ollama, vLLM and other OpenAI-format servers).
+anthropic (Claude), azure_openai (Azure OpenAI / Microsoft Foundry, v1 API, key or Entra ID),
+mistral (Mistral AI's API, or a self-hosted Mistral deployment at base_url) and openai_compatible
+(Ollama, vLLM and other OpenAI-format servers).
 
 Secrets never live in this file: provider keys come from environment variables, and a team's
 key can be given as an environment variable (key_env) instead of a stored hash.
@@ -28,20 +29,20 @@ from pathlib import Path
 
 DATA_POLICIES = ("local_only", "mask_pii", "local_if_pii")
 TIERS = ("local", "fast", "strong")
-PROVIDERS = ("anthropic", "azure_openai", "openai_compatible")
+PROVIDERS = ("anthropic", "azure_openai", "mistral", "openai_compatible")
 KINDS = ("chat", "embedding")
 
 
 @dataclass(frozen=True)
 class ModelSpec:
     alias: str  # the name teams use, e.g. "claude-fast"
-    provider: str  # "anthropic", "azure_openai" or "openai_compatible"
+    provider: str  # "anthropic", "azure_openai", "mistral" or "openai_compatible"
     model: str  # the provider's model id (for Azure OpenAI: the deployment name)
     tier: str  # "local", "fast" or "strong" (chat models); "embedding" for embedding models
     price_input: float  # USD per million input tokens
     price_output: float  # USD per million output tokens
     external: bool  # True if data leaves the organisation
-    base_url: str | None = None  # openai_compatible and azure_openai endpoints
+    base_url: str | None = None  # openai_compatible, azure_openai and self-hosted mistral
     kind: str = "chat"  # "chat" or "embedding"
     api_key_env: str | None = None  # environment variable holding the provider key
     auth: str = "api_key"  # azure_openai only: "api_key" or "entra_id" (managed identity)
@@ -147,6 +148,11 @@ class GatewayConfig:
                 raise ValueError(f"model {spec.alias}: tier must be one of {TIERS}")
             if spec.provider == "azure_openai" and not spec.base_url:
                 raise ValueError(f"model {spec.alias}: azure_openai needs base_url")
+            if spec.provider == "mistral" and not spec.base_url and not spec.external:
+                raise ValueError(
+                    f"model {spec.alias}: Mistral AI's public API is outside the organisation; "
+                    "set external to true, or give the base_url of a self-hosted deployment"
+                )
             if spec.auth not in ("api_key", "entra_id"):
                 raise ValueError(f"model {spec.alias}: auth must be api_key or entra_id")
         for team in self.teams.values():

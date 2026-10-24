@@ -3,6 +3,19 @@
 All notable changes. Versions follow [semantic versioning](https://semver.org): a new minor
 version adds features without breaking existing configurations.
 
+## 0.5.0
+
+- Mistral AI as a provider (`"provider": "mistral"`): Mistral's public API by default, or a
+  self-hosted Mistral deployment at `base_url`. The key comes from `MISTRAL_API_KEY` or the
+  model's `api_key_env`; without it the models are unavailable and routing falls back cleanly.
+- Configuration refuses Mistral's public API declared as internal (`"external": false` without a
+  `base_url`), so the data policy always treats it as leaving the organisation.
+- `gateway.mistral.example.json`: Ministral 3 8B through Ollama for the local tier, Mistral Small
+  and Mistral Large through the API for the fast and strong tiers, local embeddings; October 2026
+  list prices. No live run on Mistral models is recorded yet.
+- Tests for the provider, the configuration rules and the data policies with Mistral models
+  (108 offline tests).
+
 ## 0.4.1
 
 - First judged-routing run, Llama 3.1 8B as the judge, recorded and replayed in CI: 21/24 tasks

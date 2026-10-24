@@ -204,6 +204,28 @@ class AzureOpenAIProvider(OpenAICompatibleProvider):
         return {"model": model, "messages": messages, "max_completion_tokens": max_tokens}
 
 
+class MistralProvider(OpenAICompatibleProvider):
+    """Mistral AI's API (La Plateforme), or a self-hosted Mistral deployment serving the same API.
+
+    Chat completions and embeddings use the OpenAI format with a bearer key, so the requests are
+    the OpenAI-compatible ones; this class sets the default endpoint and requires the key, so a
+    missing key fails at start-up rather than as an unauthenticated call. The public API counts as
+    an external model (configuration enforces it); a self-hosted deployment may be internal.
+    """
+
+    DEFAULT_BASE_URL = "https://api.mistral.ai/v1"
+
+    def __init__(
+        self,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        client: httpx.Client | None = None,
+    ):
+        if not api_key:
+            raise ValueError("MistralProvider needs an API key.")
+        super().__init__(base_url or self.DEFAULT_BASE_URL, api_key=api_key, client=client)
+
+
 class RecordingProvider:
     """Record every call to disk; in offline mode, replay only (and fail on a gap)."""
 

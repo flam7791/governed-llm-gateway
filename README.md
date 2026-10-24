@@ -6,7 +6,7 @@ A small internal **LLM gateway**: one governed entry point for every model call 
 organisation. Applications call the gateway instead of calling models directly, and the gateway:
 
 - **routes** each request to the cheapest model that is good enough: a local open-weight model,
-  a fast commercial model or a strong one (Claude, Azure OpenAI, or both);
+  a fast commercial model or a strong one (Claude, Azure OpenAI, Mistral AI, or a mix);
 - **protects data**: personal data is masked before it leaves, or the request stays on a local
   model, according to each team's policy;
 - **controls cost**: per-team monthly budgets, blocking or degrading to a cheaper model, response
@@ -74,7 +74,7 @@ it in the config.
 python -m venv .venv
 # Windows (PowerShell): .venv\Scripts\Activate.ps1      macOS/Linux: source .venv/bin/activate
 pip install -e ".[dev]"
-pytest                                            # 79 offline tests
+pytest                                            # 108 offline tests
 
 llmgw init --config gateway.json                  # example config: 4 models, 3 teams
 llmgw keys add research --config gateway.json     # prints a key once; only its hash is stored
@@ -148,6 +148,36 @@ docker run --rm -p 127.0.0.1:8080:8080 -v "$PWD/gateway.json:/config/gateway.jso
 CI builds the image and checks health, access control and metrics on every push. For the whole
 stack (gateway, MCP server, agents, monitoring) see
 [governed-ai-platform](https://github.com/flam7791/governed-ai-platform).
+
+## Mistral AI, from a laptop to La Plateforme (0.5)
+
+**Mistral AI** is a provider like the others (`"provider": "mistral"`). The key comes from
+`MISTRAL_API_KEY`, or the variable named in the model's `api_key_env`; requests go to Mistral's
+public API (`https://api.mistral.ai/v1`) unless `base_url` points to a self-hosted Mistral
+deployment that serves the same API. Configuration refuses the public API declared as internal
+(`"external": false` without a `base_url`): data sent there leaves the organisation, so the data
+policy must treat it as external.
+
+[`gateway.mistral.example.json`](gateway.mistral.example.json) runs on Mistral models end to end:
+**Ministral 3 8B** (open weights, Apache 2.0) through Ollama on the organisation's own hardware for
+the local tier, **Mistral Small** for the fast tier and **Mistral Large** for the strong tier
+through the API, with local embeddings. The prices in the file are October 2026 list prices
+(USD per million tokens: Small 0.1 in and 0.3 out, Large 0.5 in and 1.5 out); set your own.
+
+```bash
+ollama pull ministral-3:8b                       # needs Ollama 0.13.1 or later
+cp gateway.mistral.example.json gateway.json
+export MISTRAL_API_KEY=...                       # PowerShell: $env:MISTRAL_API_KEY="..."
+export LLMGW_KEY_RESEARCH=...                    # team keys come from the environment (key_env)
+llmgw serve --config gateway.json
+```
+
+Nothing else changes: `legal` stays on the local model whatever it asks for, `communications`
+stays local when a request contains personal data, and `research` has personal data masked before
+a request reaches Mistral's API, as the tests check. Without a key, the Mistral models are
+unavailable and routing falls back to the next allowed model, saying so in the route reason. No
+live run on Mistral models is recorded yet: when one is, it is reported here from the evaluation
+output, like the runs below.
 
 ## Evaluation: is "auto" worth it?
 
@@ -297,6 +327,7 @@ Without an endpoint, tracing is off and costs nothing.
 - [x] Prometheus metrics, JSON usage logs, container image (0.2)
 - [x] Azure OpenAI with Microsoft Entra ID; embeddings endpoint (0.2)
 - [x] OpenTelemetry traces (0.3)
+- [x] Mistral AI as a provider (API or self-hosted), with an all-Mistral example configuration (0.5)
 - [ ] Single sign-on (OIDC) for callers instead of static team keys
 
 ## Project layout
@@ -306,14 +337,14 @@ src/llmgw/
   gateway.py     the pipeline: auth, policy, budget, masking, cache, fallback, ledger
   router.py      explainable routing rules, the complexity estimate, the optional judge
   pii.py         reversible masking of personal data
-  providers.py   Anthropic, Azure OpenAI, OpenAI-compatible (Ollama, vLLM...), record/replay
+  providers.py   Anthropic, Azure OpenAI, Mistral AI, OpenAI-compatible (Ollama, vLLM...), record/replay
   metrics.py     Prometheus metrics
   ledger.py      SQLite usage ledger, chargeback query, response cache
   api.py         FastAPI app: OpenAI-compatible endpoints, metrics, health
   evaluation.py  deterministic answer checks and strategy comparison
   config.py      teams, models, policies; example configuration
   cli.py         init | keys add | serve | ask | report | eval
-tests/           offline tests: fake providers, stand-ins for the Claude and Azure OpenAI APIs
+tests/           offline tests: fake providers, stand-ins for the Claude, Azure OpenAI and Mistral APIs
 Dockerfile       container image (non-root, health check)
 evals/           the task set (and, after a live run, recordings and results)
 docs/            design decisions

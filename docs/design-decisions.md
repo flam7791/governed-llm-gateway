@@ -110,3 +110,21 @@ answer, never change where it may go. The judge's cost is added to the request's
 with the rules on `evals/tasks.jsonl` before turning it on. Until a judged run is recorded the
 README reports no result for it. A trained classifier on logged routes stays on the roadmap; the
 judged mode gives the labelled data and the evaluation it would need.
+
+## 12. Mistral AI as a named provider, external unless self-hosted
+
+**Context.** Mistral's API speaks the OpenAI format, so the `openai_compatible` provider could
+already reach it. But a generic entry hides two things an operator must get right: the key has to
+be there (an unauthenticated call fails late, at request time), and the public API is outside the
+organisation while a self-hosted Mistral deployment may not be. Mistral also offers the same model
+family both ways: open weights to run on one's own hardware and a managed API.
+**Decision.** A `mistral` provider with Mistral's endpoint as the default and `MISTRAL_API_KEY` as
+the default key variable, failing at start-up without a key. Configuration refuses the public API
+declared as internal; a model with its own `base_url` (a self-hosted deployment) may be internal.
+`gateway.mistral.example.json` puts Ministral 3 8B on local hardware for the local tier and
+Mistral Small and Large behind the API for the fast and strong tiers.
+**Consequences.** A team's data policy can choose between a Mistral model on the organisation's
+hardware and one behind Mistral's API with no change in the calling code; the masking, budgets,
+ledger and traces are the same as for every other provider. Quality and cost on Mistral models
+are claims to measure on `evals/tasks.jsonl`, not to assume.
+

@@ -23,7 +23,7 @@ llmgw eval evals/tasks.jsonl --config gateway.json --recordings evals/recordings
 - `src/llmgw/router.py`: routing rules, the complexity estimate, and the optional judged router
 - `src/llmgw/config.py`: teams, data policies, models and prices (`gateway.example.json`)
 - `src/llmgw/pii.py`: masking and restoring personal data
-- `src/llmgw/providers.py`: Anthropic, OpenAI-compatible and local providers
+- `src/llmgw/providers.py`: Anthropic, Azure OpenAI, Mistral AI, OpenAI-compatible and local providers
 - `src/llmgw/evaluation.py`: router agreement with human labels and cost against single models
 - `evals/tasks.jsonl`: 24 labelled tasks; `evals/results/eval.md`: the last recorded run
 

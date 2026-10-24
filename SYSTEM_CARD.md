@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Component | C1 model gateway ([ai-engineering-framework](https://github.com/flam7791/ai-engineering-framework)) |
-| Models | Configured per deployment: Claude, Azure OpenAI (Entra ID), local open-weight models through Ollama or any OpenAI-compatible server |
+| Models | Configured per deployment: Claude, Azure OpenAI (Entra ID), Mistral AI (API or self-hosted), local open-weight models through Ollama or any OpenAI-compatible server |
 
 ## Intended use
 

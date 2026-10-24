@@ -5,6 +5,7 @@ Provider secrets come from environment variables (in a deployment, injected from
 - azure_openai:       the model's api_key_env (default AZURE_OPENAI_API_KEY), or, with
                       "auth": "entra_id", a Microsoft Entra ID token from the managed identity
                       (needs the optional azure-identity package: pip install ".[azure]")
+- mistral:            the model's api_key_env (default MISTRAL_API_KEY)
 - openai_compatible:  the model's api_key_env (default OPENAI_COMPATIBLE_API_KEY), often none
 """
 
@@ -19,6 +20,7 @@ from .ledger import Ledger
 from .providers import (
     AnthropicProvider,
     AzureOpenAIProvider,
+    MistralProvider,
     OpenAICompatibleProvider,
     Provider,
     ProviderError,
@@ -59,6 +61,13 @@ def _azure(spec: ModelSpec, token_provider_factory):
     return AzureOpenAIProvider(spec.base_url, api_key=os.environ[key_env])
 
 
+def _mistral(spec: ModelSpec):
+    key_env = spec.api_key_env or "MISTRAL_API_KEY"
+    if not os.environ.get(key_env):
+        return UnavailableProvider(f"{key_env} is not set")
+    return MistralProvider(spec.base_url, api_key=os.environ[key_env])
+
+
 def build_providers(
     config: GatewayConfig,
     recordings: Path | None = None,
@@ -79,6 +88,8 @@ def build_providers(
                 inner = UnavailableProvider("ANTHROPIC_API_KEY is not set")
         elif spec.provider == "azure_openai":
             inner = _azure(spec, token_provider_factory)
+        elif spec.provider == "mistral":
+            inner = _mistral(spec)
         elif spec.provider == "openai_compatible":
             inner = OpenAICompatibleProvider(
                 spec.base_url or "http://localhost:11434/v1",

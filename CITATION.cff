@@ -2,12 +2,12 @@ cff-version: 1.2.0
 message: "If you use or refer to this software, please cite it as below."
 type: software
 title: governed-llm-gateway
-abstract: "A small internal LLM gateway: routes each request to the cheapest adequate model (Claude, Azure OpenAI or a local open-weight model), masks personal data, enforces team budgets, produces chargeback reports and exposes Prometheus metrics."
+abstract: "A small internal LLM gateway: routes each request to the cheapest adequate model (Claude, Azure OpenAI, Mistral AI or a local open-weight model), masks personal data, enforces team budgets, produces chargeback reports and exposes Prometheus metrics."
 authors:
   - given-names: Flavio
     family-names: Mericio
-version: 0.4.1
-date-released: "2026-10-16"
+version: 0.5.0
+date-released: "2026-10-24"
 license: MIT
 repository-code: "https://github.com/flam7791/governed-llm-gateway"
 url: "https://github.com/flam7791/governed-llm-gateway"
