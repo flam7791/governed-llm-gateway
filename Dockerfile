@@ -6,7 +6,7 @@
 # The configuration is mounted read-only; the ledger lives on the /data volume; secrets come in
 # as environment variables (from a secret store in a real deployment), never in the image.
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
